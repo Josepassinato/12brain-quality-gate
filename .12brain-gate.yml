@@ -1,0 +1,6 @@
+# Config padrão do 12brain-quality-gate V1 — valores CONGELADOS (design review 2026-06-18).
+# Recalibração permitida só no D8 (após 3 PRs reais).
+weights:        { engineering: 0.20, tests: 0.25, security: 0.30, ux: 0.15, performance: 0.10 }
+thresholds:     { pass: 85, warn: 70 }     # >=85 pass · 70-84 ressalva · <70 block
+hard_block:     [build_fail, security_critical, e2e_red]   # ignoram o score
+performance:    { enabled: false }          # Lighthouse fora do V1 (peso 10 = neutro 100)

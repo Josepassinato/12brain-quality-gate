@@ -1,0 +1,63 @@
+name: "12brain-quality-gate"
+description: "Quality Gate corporativo 12Brain V1 — engenharia + testes + segurança + UX. Produz quality-score.json e VERIFICATION.md. Não altera score/schema/override (congelados 2026-06-18)."
+author: "12Brain"
+
+inputs:
+  project_type:
+    description: "node | python | fullstack"
+    default: "node"
+  app_url:
+    description: "URL p/ Playwright/impeccable (D2/D4). Vazio = stages visuais/e2e ficam skipped."
+    default: ""
+  fail_on_score:
+    description: "Score mínimo p/ não bloquear (default congelado 70)."
+    default: "70"
+  node_version:
+    default: "20"
+
+outputs:
+  score:
+    description: "Score 0-100"
+    value: ${{ steps.gate.outputs.score }}
+  decision:
+    description: "pass | pass_with_warnings | block"
+    value: ${{ steps.gate.outputs.decision }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node_version }}
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+    - name: Run quality gate
+      id: gate
+      shell: bash
+      env:
+        APP_URL: ${{ inputs.app_url }}
+      run: |
+        bash "${{ github.action_path }}/scripts/run-gate.sh" "." ".gate" \
+          "${{ github.repository }}" "${{ github.sha }}" "${{ github.event.pull_request.number || 0 }}" || true
+        echo "score=$(python3 -c "import json;print(json.load(open('.gate/quality-score.json'))['score'])")" >> "$GITHUB_OUTPUT"
+        echo "decision=$(python3 -c "import json;print(json.load(open('.gate/quality-score.json'))['decision'])")" >> "$GITHUB_OUTPUT"
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: quality-gate
+        path: |
+          .gate/quality-score.json
+          .gate/VERIFICATION.md
+
+    - name: Enforce gate
+      shell: bash
+      run: |
+        DEC=$(python3 -c "import json;print(json.load(open('.gate/quality-score.json'))['decision'])")
+        echo "Decisão do gate: $DEC"
+        cat .gate/VERIFICATION.md
+        if [ "$DEC" = "block" ]; then echo "::error::Quality Gate bloqueou o merge"; exit 1; fi
