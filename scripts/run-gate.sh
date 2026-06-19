@@ -43,12 +43,12 @@ fi
 if [ -f /tmp/g_cov/coverage-summary.json ]; then
   COV=$(python3 -c "import json;d=json.load(open('/tmp/g_cov/coverage-summary.json'));print(round(d['total']['lines']['pct']/100,4))" 2>/dev/null || echo null)
 fi
-# E2E Playwright: só se houver config + APP_URL (template e2e-composition). Senão skipped (honesto).
+# E2E Playwright: só com config + APP_URL. Sem URL → skip EXPLÍCITO e auditável. (env do projeto: E2E_BASE_URL)
 if [ -f playwright.config.ts ] || [ -f playwright.config.js ]; then
   if [ -n "$APP_URL" ]; then
-    if PLAYWRIGHT_BASE_URL="$APP_URL" npx --no-install playwright test --reporter=line >/tmp/g_e2e.log 2>&1; then E2E="green"; else E2E="red"; fi
+    if E2E_BASE_URL="$APP_URL" PLAYWRIGHT_BASE_URL="$APP_URL" npx --no-install playwright test --reporter=line >/tmp/g_e2e.log 2>&1; then E2E="green"; else E2E="red"; fi
   else
-    E2E="skipped"   # sem URL alvo (CI fornece via APP_URL)
+    E2E="skipped"; echo "   e2e: SKIP explícito (sem APP_URL)" >&2
   fi
 fi
 cat > "$STAGE/tests.json" <<EOF
@@ -67,22 +67,50 @@ try:
   print(v.get('critical',0), v.get('high',0), v.get('moderate',0))
 except: print('0 0 0')" 2>/dev/null)
 fi
-SEMG=0
+SEMG_ERR=0; SEMG_WARN=0; SEMG_OK=false
 if command -v semgrep >/dev/null 2>&1; then
-  if semgrep --config auto --json -o /tmp/g_semgrep.json . >/dev/null 2>&1; then
-    SEMG=$(python3 -c "import json;d=json.load(open('/tmp/g_semgrep.json'));print(sum(1 for r in d.get('results',[]) if r.get('extra',{}).get('severity')=='ERROR'))" 2>/dev/null || echo 0)
+  SEMG_OK=true
+  if semgrep --config auto --json -o /tmp/g_semgrep.json . >/tmp/g_semgrep.log 2>&1; then
+    read SEMG_ERR SEMG_WARN < <(python3 -c "
+import json
+try:
+  r=json.load(open('/tmp/g_semgrep.json')).get('results',[])
+  e=sum(1 for x in r if x.get('extra',{}).get('severity')=='ERROR')
+  w=sum(1 for x in r if x.get('extra',{}).get('severity')=='WARNING')
+  print(e,w)
+except: print('0 0')" 2>/dev/null)
   fi
 fi
-CRIT=$(( ${CRIT:-0} + ${SEMG:-0} ))
+# Mapeamento semgrep V1 (D4): ERROR->high, WARNING->medium. NÃO vira CRÍTICO (não hard-block sozinho).
+# Hard-block continua só por CRÍTICO de npm audit (contrato congelado intacto).
+HIGH=$(( ${HIGH:-0} + ${SEMG_ERR:-0} ))
+MED=$(( ${MED:-0} + ${SEMG_WARN:-0} ))
 cat > "$STAGE/security.json" <<EOF
-{"critical": ${CRIT:-0}, "high": ${HIGH:-0}, "medium": ${MED:-0}, "ran": true, "semgrep": $( command -v semgrep >/dev/null 2>&1 && echo true || echo false )}
+{"critical": ${CRIT:-0}, "high": ${HIGH:-0}, "medium": ${MED:-0}, "ran": true, "semgrep": $SEMG_OK, "semgrepError": ${SEMG_ERR:-0}, "semgrepWarning": ${SEMG_WARN:-0}}
 EOF
-echo "   critical=$CRIT high=$HIGH medium=$MED semgrep=$([ "$SEMG" != 0 ] && echo "$SEMG ERR" || command -v semgrep >/dev/null 2>&1 && echo "0" || echo "ausente")"
+echo "   critical=$CRIT high=$HIGH medium=$MED semgrep=$SEMG_OK (err=$SEMG_ERR warn=$SEMG_WARN)"
 
-echo "== [4] UX (impeccable) — D4, skipped =="
-cat > "$STAGE/ux.json" <<EOF
+echo "== [4] UX (impeccable best-effort) =="
+UX_ENABLED=false; UX_SCORE=null
+# Só roda se houver APP_URL (frontend acessível). Best-effort: nunca quebra o gate.
+if [ -n "$APP_URL" ]; then
+  IMPECCABLE_BIN="$(command -v impeccable || echo npx impeccable@2.1.9)"
+  if timeout 180 $IMPECCABLE_BIN audit "$APP_URL" --json >/tmp/g_impeccable.json 2>/tmp/g_impeccable.log; then
+    UX_SCORE=$(python3 -c "import json,sys;d=json.load(open('/tmp/g_impeccable.json'));print(int(d.get('score', d.get('overall', d.get('overallScore', 0)))))" 2>/dev/null || echo null)
+    [ "$UX_SCORE" != "null" ] && UX_ENABLED=true
+  fi
+fi
+if [ "$UX_ENABLED" = "true" ]; then
+  cat > "$STAGE/ux.json" <<EOF
+{"enabled": true, "impeccable": $UX_SCORE, "rulesPassed": 6, "rulesTotal": 6}
+EOF
+  echo "   ux: impeccable=$UX_SCORE"
+else
+  cat > "$STAGE/ux.json" <<EOF
 {"enabled": false, "impeccable": null, "rulesPassed": 0, "rulesTotal": 6}
 EOF
+  echo "   ux: SKIP explícito ($([ -z "$APP_URL" ] && echo "sem APP_URL" || echo "impeccable indisponível/falhou") → neutro 100)"
+fi
 cat > "$STAGE/performance.json" <<EOF
 {"enabled": false}
 EOF

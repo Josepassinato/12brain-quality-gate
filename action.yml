@@ -35,6 +35,15 @@ runs:
       shell: bash
       run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
+    - name: Setup security tooling (semgrep)
+      shell: bash
+      run: pipx install semgrep 2>/dev/null || pip install --quiet semgrep || python3 -m pip install --quiet semgrep || true
+
+    - name: Setup Playwright browsers (se houver config + app_url)
+      if: ${{ inputs.app_url != '' }}
+      shell: bash
+      run: npx --no-install playwright install --with-deps chromium || true
+
     - name: Run quality gate
       id: gate
       shell: bash
