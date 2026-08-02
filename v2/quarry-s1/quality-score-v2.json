@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 2,
+  "gateVersion": "2.0.0-s1",
+  "profile": "agentic-platform",
+  "languages": [
+    "node",
+    "python",
+    "go"
+  ],
+  "score": 72,
+  "decision": "pass_with_warnings",
+  "pillars": {
+    "engineering": {
+      "score": 100,
+      "weight": 0.15,
+      "details": {
+        "node_typeErrors": 0,
+        "node_lintErrors": 0,
+        "python_ruffIssues": 0,
+        "typeErrors": 0,
+        "lintErrors": 0,
+        "build": true
+      }
+    },
+    "tests": {
+      "score": 100,
+      "weight": 0.2,
+      "details": {
+        "note": "S1: testes não executados (neutro)"
+      }
+    },
+    "security": {
+      "score": 0,
+      "weight": 0.25,
+      "details": {
+        "critical_runtime": 0,
+        "critical_devonly": 2,
+        "high": 14,
+        "moderate": 42,
+        "critical_runtime_pkgs": [],
+        "critical_devonly_pkgs": [
+          "shell-quote",
+          "vitest"
+        ],
+        "flaky_advisories": []
+      }
+    },
+    "agentic": {
+      "score": 87,
+      "weight": 0.25,
+      "vectors": {
+        "prompt_injection": "pass",
+        "tool_misuse": "warn",
+        "runaway_loop": "pass"
+      }
+    },
+    "observability": {
+      "score": 100,
+      "weight": 0.15,
+      "details": {
+        "note": "S1: observability não implementada (neutro)"
+      }
+    }
+  },
+  "adapters": [
+    {
+      "lang": "polyglot",
+      "node_typeErrors": 0,
+      "node_lintErrors": 0,
+      "python_ruffIssues": 0,
+      "typeErrors": 0,
+      "lintErrors": 0,
+      "build": true
+    },
+    {
+      "lang": "node-deps",
+      "critical_runtime": 0,
+      "critical_devonly": 2,
+      "high": 14,
+      "moderate": 42,
+      "critical_runtime_pkgs": [],
+      "critical_devonly_pkgs": [
+        "shell-quote",
+        "vitest"
+      ],
+      "flaky_advisories": []
+    }
+  ],
+  "agenticFindings": [
+    {
+      "vector": "prompt_injection",
+      "verdict": "pass",
+      "hardBlock": false,
+      "severity": "info",
+      "rationale": "Sanitizer presente (9 arquivo(s)) + wrapping de input não-confiável (<UNTRUSTED_DATA>)."
+    },
+    {
+      "vector": "tool_misuse",
+      "verdict": "warn",
+      "hardBlock": false,
+      "severity": "medium",
+      "rationale": "1 uso(s) de eval/exec dinâmico (revisar se input não-confiável alcança). SSRF guard presente."
+    },
+    {
+      "vector": "runaway_loop",
+      "verdict": "pass",
+      "hardBlock": false,
+      "severity": "info",
+      "rationale": "Bounds de loop/timeout presentes (17 sinal(is): max_iterations/recursion_limit/timeout clamp)."
+    }
+  ],
+  "blockers": [],
+  "warnings": [
+    "[SEC] 14 CVE high",
+    "[SEC] 2 critical dev-only (não bloqueia)",
+    "[AGENTIC] tool_misuse: WARN — 1 uso(s) de eval/exec dinâmico (revisar se input não-confiável alcança). SSRF guard presente.",
+    "[SCORE-BAND] score 72 em faixa de ressalva (70–84)"
+  ],
+  "repo": "Josepassinato/Security",
+  "sha": "933f5e67",
+  "pr": 0,
+  "generatedAt": "2026-06-19T23:50:42.805Z",
+  "enforced": false,
+  "note": "S1 read-only: NÃO bloqueia deploy."
+}
